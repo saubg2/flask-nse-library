@@ -12,8 +12,8 @@ import os
 
 app = Flask(__name__)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-DATABASE = os.environ.get('DATABASE_URL', os.path.join(APP_DIR, 'nselib_data.db'))
-
+#DATABASE = os.environ.get('DATABASE_URL', os.path.join(APP_DIR, 'nselib_data.db'))
+DATABASE = ('nselib_data.db')
 def get_db_connection():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
