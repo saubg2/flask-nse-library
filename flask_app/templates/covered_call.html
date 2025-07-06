@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Covered Call A+B Analysis{% endblock %}
+
+{% block content %}
+<style>
+    .secondary-menu {
+        background-color: #e0e0e0;
+        padding: 10px 0;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    .secondary-menu ul {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        justify-content: flex-start; /* Left-justify buttons */
+    }
+    .secondary-menu ul li {
+        margin: 0 15px;
+    }
+    .secondary-menu ul li button {
+        background-color: #00796b;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+    .secondary-menu ul li button:hover {
+        background-color: #004d40;
+    }
+    .main-content {
+        padding: 20px;
+    }
+    #results-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+        table-layout: fixed; /* Key for equal columns */
+    }
+    #results-table th, #results-table td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+        font-size: 12px;
+        overflow-wrap: break-word; /* Wrap long text */
+    }
+    #results-table th {
+        background-color: #f2f2f2;
+    }
+</style>
+
+<div class="main-content">
+    <div style="text-align: left; margin-bottom: 10px;">
+        <label for="top-n">Show Top N OIs:</label>
+        <input type="number" id="top-n" value="2" min="1">
+    </div>
+    <div style="text-align: left; margin-bottom: 10px;">
+        <label for="stock-filter">Filter Stocks:</label>
+        <select id="stock-filter">
+            <option value="all">All Stocks</option>
+            <option value="preferred">Preferred Stocks</option>
+        </select>
+    </div>
+    <button id="covered-call-analysis" style="margin-bottom: 10px;">Run Covered Call A+B</button>
+    <div id="results-container">
+        <div style="overflow-x:auto;">
+            <table id="results-table" style="display:none;">
+                <thead></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <p id="no-results-message" style="display:none;">No results found for the given strategy.</p>
+    </div>
+</div>
+<script>
+    function interpolateColor(value, minVal, maxVal, startColor, endColor) {
+        if (maxVal === minVal) {
+            return `rgb(${startColor[0]}, ${startColor[1]}, ${startColor[2]})`; // All values are the same, return start color
+        }
+        const normalized = (value - minVal) / (maxVal - minVal);
+        const r = Math.round(startColor[0] + normalized * (endColor[0] - startColor[0]));
+        const g = Math.round(startColor[1] + normalized * (endColor[1] - startColor[1]));
+        const b = Math.round(startColor[2] + normalized * (endColor[2] - startColor[2]));
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    document.getElementById('covered-call-analysis').addEventListener('click', function() {
+        const topN = document.getElementById('top-n').value;
+        const stockFilter = document.getElementById('stock-filter').value;
+        fetch(`/api/analyze/covered_call_data?top_n=${topN}&stock_filter=${stockFilter}`)
+            .then(response => response.json())
+            .then(data => {
+                const table = document.getElementById('results-table');
+                const thead = table.querySelector('thead');
+                const tbody = table.querySelector('tbody');
+                const noResultsMessage = document.getElementById('no-results-message');
+
+                // Clear previous results
+                thead.innerHTML = '';
+                tbody.innerHTML = '';
+                table.style.display = 'none';
+                noResultsMessage.style.display = 'none';
+
+                if (data && data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
+                    const hiddenColumns = [
+                        'INSTRUMENT',
+                        'MARKET_LOT',
+                        'MARKET_TYPE',
+                        'OPENING_PRICE',
+                        'PREV_CLS',
+                        'TOT_TRADED_VAL',
+                        'TRADE_HIGH_PRICE',
+                        'TRADE_LOW_PRICE',
+                        'unique_id'
+                    ];
+                    const firstDataItem = data.data[0];
+                    if (typeof firstDataItem !== 'object' || firstDataItem === null) {
+                        console.error('Expected data.data[0] to be an object, but got:', firstDataItem);
+                        noResultsMessage.style.display = 'block';
+                        return;
+                    }
+                    const allHeaders = Object.keys(firstDataItem);
+                    const visibleHeaders = [
+                        'TIMESTAMP',
+                        'SYMBOL',
+                        'EXPIRY_DT',
+                        'OPTION_TYPE',
+                        'STRIKE_PRICE',
+                        'UNDERLYING_VALUE',
+                        'CLOSING_PRICE',
+                        'OPEN_INT',
+                        'CHANGE_IN_OI',
+                        'TOT_TRADED_QTY',
+                        'Interest',
+                        'Appreciation',
+                        'Return'
+                    ];
+
+                    let headerRow = '<tr>';
+                    visibleHeaders.forEach(header => {
+                        headerRow += `<th>${header}</th>`;
+                    });
+                    headerRow += '</tr>';
+                    thead.innerHTML = headerRow;
+
+                    // Find min and max for Interest and Return for color scaling
+                    let minInterest = Infinity;
+                    let maxInterest = -Infinity;
+                    let minReturn = Infinity;
+                    let maxReturn = -Infinity;
+
+                    data.data.forEach(rowData => {
+                        const interest = parseFloat(rowData['Interest']);
+                        if (!isNaN(interest)) {
+                            if (interest < minInterest) minInterest = interest;
+                            if (interest > maxInterest) maxInterest = interest;
+                        }
+                        const ret = parseFloat(rowData['Return']);
+                        if (!isNaN(ret)) {
+                            if (ret < minReturn) minReturn = ret;
+                            if (ret > maxReturn) maxReturn = ret;
+                        }
+                    });
+
+                    // Adjust ranges to avoid division by zero if all values are the same
+                    if (minInterest === maxInterest) maxInterest = minInterest + 0.01;
+                    if (minReturn === maxReturn) maxReturn = minReturn + 0.01;
+
+                    // Define colors
+                    const white = [255, 255, 255];
+                    const appleGreen = [139, 195, 74];
+                    const orange = [255, 165, 0];
+
+                    data.data.forEach(rowData => {
+                        if (typeof rowData !== 'object' || rowData === null) {
+                            console.error('Expected rowData to be an object, but got:', rowData);
+                            return; // Skip this row if it's not a valid object
+                        }
+                        let row = '<tr>';
+                        visibleHeaders.forEach(header => {
+                            let cellContent = rowData[header];
+                            let cellStyle = '';
+
+                            if (header === 'Interest') {
+                                const interestValue = parseFloat(cellContent);
+                                if (!isNaN(interestValue)) {
+                                    cellStyle = `background-color: ${interpolateColor(interestValue, minInterest, maxInterest, white, appleGreen)};`;
+                                }
+                            } else if (header === 'Return') {
+                                const returnValue = parseFloat(cellContent);
+                                if (!isNaN(returnValue)) {
+                                    cellStyle = `background-color: ${interpolateColor(returnValue, minReturn, maxReturn, white, orange)};`;
+                                }
+                            }
+                            row += `<td style="${cellStyle}">${cellContent}</td>`;
+                        });
+                        row += '</tr>';
+                        tbody.innerHTML += row;
+                    });
+
+                    table.style.display = 'table';
+                } else {
+                    noResultsMessage.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                console.error('Error running analysis:', error);
+            });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+
+{% block title %}OI Shift Analysis{% endblock %}
+
+{% block content %}
+<style>
+    .secondary-menu {
+        background-color: #e0e0e0;
+        padding: 10px 0;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    .secondary-menu ul {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        justify-content: flex-start;
+    }
+    .secondary-menu ul li {
+        margin: 0 15px;
+    }
+    .secondary-menu ul li button {
+        background-color: #00796b;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+    .secondary-menu ul li button:hover {
+        background-color: #004d40;
+    }
+    .filter-container {
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+    .filter-container label {
+        font-weight: bold;
+    }
+    #stock-select {
+        min-width: 250px;
+    }
+    .main-content {
+        padding: 20px;
+    }
+    .results-wrapper {
+        display: flex;
+        gap: 20px;
+    }
+    #results-sidebar {
+        width: 200px;
+        border-right: 1px solid #ddd;
+        padding-right: 20px;
+        height: calc(100vh - 200px); /* Adjust height as needed */
+        overflow-y: auto;
+    }
+    #results-sidebar ul {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+    }
+    #results-sidebar li a {
+        display: block;
+        padding: 10px;
+        text-decoration: none;
+        color: #333;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    #results-sidebar li a:hover {
+        background-color: #f0f0f0;
+    }
+    #results-sidebar li a.active {
+        background-color: #00796b;
+        color: white;
+    }
+    #results-container {
+        flex-grow: 1;
+    }
+    .analysis-container {
+        width: 100%;
+    }
+    .option-type-column {
+        width: 100%;
+        margin-bottom: 30px;
+    }
+    table.data {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+    }
+    table.data th, table.data td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+        font-size: 12px;
+    }
+    table.data th {
+        background-color: #f2f2f2;
+    }
+</style>
+
+<div class="main-content">
+    <div class="filter-container">
+        <label for="stock-select">Select Stocks:</label>
+        <select name="stocks" id="stock-select" multiple>
+            <!-- Options will be loaded dynamically -->
+        </select>
+        <label for="expiry-select">Select Expiry:</label>
+        <select name="expiry" id="expiry-select">
+            <!-- Options will be loaded dynamically -->
+        </select>
+        <div class="radio-group">
+            <label>Display As:</label>
+            <input type="radio" id="display-percentage" name="display-type" value="percentage" checked>
+            <label for="display-percentage">Percentage</label>
+            <input type="radio" id="display-actual" name="display-type" value="actual">
+            <label for="display-actual">Actual Values (Thousands)</label>
+        </div>
+        <button id="run-analysis-btn">Run Analysis</button>
+    </div>
+    <p>This strategy identifies OI Shift by tracking the OI and Volume for the Top 5 strike prices over time. The trend is shown as a percentage of the total activity across those key strikes.</p>
+    
+    <div class="results-wrapper">
+        <div id="results-sidebar">
+            <ul id="stock-list"></ul>
+        </div>
+        <div id="results-container">
+            <div id="stock-table-display">
+                <!-- Stock tables will be loaded here -->
+            </div>
+            <p id="no-results-message" style="display:none;">No results found for the given strategy.</p>
+            <button id="next-stock-button" style="display:none; margin-top: 10px;">Next Stock</button>
+        </div>
+    </div>
+</div>
+<script>
+    let allStockData = [];
+    let currentStockIndex = 0;
+    let stockSelect;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        Promise.all([
+            fetch('/api/get_analysis_symbols').then(response => response.json()),
+            fetch('/api/get_expiry_dates').then(response => response.json())
+        ])
+        .then(([symbols, expiryDates]) => {
+            const stockSelectElement = document.getElementById('stock-select');
+            const allOption = new Option('All Stocks', 'All');
+            stockSelectElement.add(allOption);
+            symbols.forEach(symbol => {
+                const option = new Option(symbol, symbol);
+                stockSelectElement.add(option);
+            });
+            stockSelect = new TomSelect('#stock-select', {
+                plugins: ['remove_button'],
+                create: false,
+                placeholder: 'Select stocks...',
+                onItemAdd: function() {
+                    if (this.getValue().includes('All')) {
+                        if (this.getValue().length > 1) this.removeItem('All');
+                    }
+                }
+            });
+
+            const expirySelectElement = document.getElementById('expiry-select');
+            expiryDates.forEach(expiry => {
+                const option = new Option(expiry, expiry);
+                expirySelectElement.add(option);
+            });
+            // Set default to the first expiry date (current month)
+            if (expiryDates.length > 0) {
+                expirySelectElement.value = expiryDates[0];
+            }
+        });
+
+        document.getElementById('run-analysis-btn').addEventListener('click', runAnalysis);
+        document.getElementById('next-stock-button').addEventListener('click', displayNextStock);
+        document.getElementById('stock-list').addEventListener('click', handleSidebarClick);
+    });
+
+    function runAnalysis() {
+        const selectedSymbols = stockSelect.getValue();
+        let stocksToFetch = selectedSymbols.includes('All') ? [] : selectedSymbols;
+        const displayType = document.querySelector('input[name="display-type"]:checked').value;
+        const selectedExpiry = document.getElementById('expiry-select').value;
+
+        const resultsContainer = document.getElementById('stock-table-display');
+        resultsContainer.innerHTML = '<p>Loading analysis data...</p>';
+        document.getElementById('stock-list').innerHTML = ''; // Clear sidebar
+
+        fetch('/api/analyze/oi_shift_data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ stocks: stocksToFetch, display_type: displayType, expiry: selectedExpiry })
+        })
+        .then(response => response.json())
+        .then(response => {
+            if (response && response.status === 'success' && Array.isArray(response.data) && response.data.length > 0) {
+                allStockData = response.data;
+                currentStockIndex = 0;
+                populateSidebar();
+                displayCurrentStockTable();
+            } else {
+                resultsContainer.innerHTML = '';
+                document.getElementById('no-results-message').textContent = response.message || 'No results found.';
+                document.getElementById('no-results-message').style.display = 'block';
+                document.getElementById('next-stock-button').style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Error running analysis:', error);
+            resultsContainer.innerHTML = '';
+            document.getElementById('no-results-message').textContent = 'An error occurred.';
+            document.getElementById('no-results-message').style.display = 'block';
+        });
+    }
+
+    function populateSidebar() {
+        const stockList = document.getElementById('stock-list');
+        stockList.innerHTML = ''; // Clear existing list
+        allStockData.forEach((stockInfo, index) => {
+            const li = document.createElement('li');
+            const a = document.createElement('a');
+            a.textContent = stockInfo.symbol;
+            a.href = '#';
+            a.dataset.index = index;
+            li.appendChild(a);
+            stockList.appendChild(li);
+        });
+    }
+
+    function handleSidebarClick(event) {
+        event.preventDefault();
+        if (event.target.tagName === 'A') {
+            const index = parseInt(event.target.dataset.index, 10);
+            if (index !== currentStockIndex) {
+                currentStockIndex = index;
+                displayCurrentStockTable();
+            }
+        }
+    }
+
+    function displayNextStock() {
+        currentStockIndex = (currentStockIndex + 1) % allStockData.length;
+        displayCurrentStockTable();
+    }
+
+    function updateSidebarActiveState() {
+        const links = document.querySelectorAll('#stock-list li a');
+        links.forEach((link, index) => {
+            if (index === currentStockIndex) {
+                link.classList.add('active');
+            } else {
+                link.classList.remove('active');
+            }
+        });
+    }
+
+    function displayCurrentStockTable() {
+        const stockTableDisplay = document.getElementById('stock-table-display');
+        const noResultsMessage = document.getElementById('no-results-message');
+        const nextStockButton = document.getElementById('next-stock-button');
+
+        stockTableDisplay.innerHTML = '';
+
+        if (allStockData.length > 0) {
+            const stockInfo = allStockData[currentStockIndex];
+            let fullHtml = `<h3>Stock: ${stockInfo.symbol}</h3><div class="analysis-container">`;
+
+            // CE Section
+            fullHtml += `<div class="option-type-column"><h3>Call Options (CE)</h3>`;
+            fullHtml += renderTable(stockInfo.oi_data_ce, "OI distribution (%)", [255, 255, 255], [255, 100, 100], stockInfo.expiry_day);
+            fullHtml += renderTable(stockInfo.volume_data_ce, "Volume distribution (%)", [255, 255, 255], [100, 255, 100], stockInfo.expiry_day);
+            fullHtml += `</div>`;
+
+            // PE Section
+            fullHtml += `<div class="option-type-column"><h3>Put Options (PE)</h3>`;
+            fullHtml += renderTable(stockInfo.oi_data_pe, "OI distribution (%)", [255, 255, 255], [255, 100, 100], stockInfo.expiry_day);
+            fullHtml += renderTable(stockInfo.volume_data_pe, "Volume distribution (%)", [255, 255, 255], [100, 255, 100], stockInfo.expiry_day);
+            fullHtml += `</div>`;
+
+            fullHtml += `</div>`; // Close analysis-container
+
+            stockTableDisplay.innerHTML = fullHtml;
+            noResultsMessage.style.display = 'none';
+            nextStockButton.style.display = allStockData.length > 1 ? 'block' : 'none';
+            nextStockButton.textContent = currentStockIndex >= allStockData.length - 1 ? 'Start Over' : 'Next Stock';
+            updateSidebarActiveState();
+        } else {
+            noResultsMessage.style.display = 'block';
+            nextStockButton.style.display = 'none';
+        }
+    }
+
+    function interpolateColor(value, minVal, maxVal, startColor, endColor) {
+        if (maxVal === minVal) return `rgb(${startColor.join(',')})`;
+        const t = (value - minVal) / (maxVal - minVal);
+        const r = Math.round(startColor[0] + t * (endColor[0] - startColor[0]));
+        const g = Math.round(startColor[1] + t * (endColor[1] - startColor[1]));
+        const b = Math.round(startColor[2] + t * (endColor[2] - startColor[2]));
+        return `rgb(${r},${g},${b})`;
+    }
+
+    function renderTable(data, title, startColor, endColor, expiryDay) {
+        if (!data || !data.columns || !data.index || !data.data || data.data.length === 0) {
+            return `<p>No ${title} data available.</p>`;
+        }
+        let tableHtml = `<h4>${title}</h4><table class="data"><thead><tr><th>Strike Price</th>`;
+        data.columns.forEach(col => {
+            let headerStyle = '';
+            if (col === expiryDay) {
+                headerStyle = 'background-color: lightblue;';
+            }
+            tableHtml += `<th style="${headerStyle}">${col}</th>`;
+        });
+        tableHtml += `</tr></thead><tbody>`;
+        const allValues = data.data.flatMap(row => Object.values(row).filter(v => typeof v === 'number'));
+        const minVal = Math.min(...allValues);
+        const maxVal = Math.max(...allValues);
+        data.index.forEach((strikePrice, rowIndex) => {
+            tableHtml += `<tr><td>${strikePrice}</td>`;
+            const rowData = data.data[rowIndex];
+            data.columns.forEach(col => {
+                const cellValue = rowData[col] !== undefined ? rowData[col] : 0;
+                const bgColor = typeof cellValue === 'number' ? interpolateColor(cellValue, minVal, maxVal, startColor, endColor) : '#fff';
+                tableHtml += `<td style="background-color: ${bgColor};">${Math.round(cellValue)}</td>`;
+            });
+            tableHtml += `</tr>`;
+        });
+        tableHtml += `</tbody></table>`;
+        return tableHtml;
+    }
+
+</script>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}NSELib Data Viewer{% endblock %}
+
+{% block content %}
+    <style>
+        .table-container {
+            overflow-x: auto;
+            width: 100%;
+            margin-top: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+        table.data {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px 12px;
+            font-size: 14px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+            white-space: nowrap; /* Prevent text wrapping in cells */
+        }
+        th {
+            background-color: #00796b; /* Teal header */
+            color: white;
+            font-weight: bold;
+            text-transform: uppercase;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2; /* Light gray for even rows */
+        }
+        tr:hover {
+            background-color: #e0f7fa; /* Lighter blue on hover */
+        }
+    </style>
+    <h1>Stored F&O Data</h1>
+    <div style="text-align: right; margin-bottom: 10px;">
+        <div class="pagination">
+            {% if page > 1 %}
+                <a href="{{ url_for('view_data', page=page-1) }}">&laquo; Previous</a>
+            {% endif %}
+            <span>Page {{ page }} of {{ total_pages }}</span>
+            {% if page < total_pages %}
+                <a href="{{ url_for('view_data', page=page+1) }}">Next &raquo;</a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="table-container">
+        {% for table in tables %}
+            {{ table|safe }}
+        {% endfor %}
+    </div>
+{% endblock %}

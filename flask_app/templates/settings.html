@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<style>
+    .settings-container {
+        padding: 20px;
+        max-width: 600px;
+        margin: auto;
+    }
+    .setting-item {
+        margin-bottom: 20px;
+    }
+    .setting-item label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: bold;
+    }
+    .setting-item input[type="number"] {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+    #save-settings {
+        background-color: #00796b;
+        color: white;
+        border: none;
+        padding: 12px 25px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        width: 100%;
+    }
+    #save-settings:hover {
+        background-color: #004d40;
+    }
+    .message {
+        margin-top: 15px;
+        padding: 10px;
+        border-radius: 4px;
+        text-align: center;
+    }
+    .message.success {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    .message.error {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+</style>
+<div class="settings-container">
+    <h2>Application Settings</h2>
+    
+    <div class="setting-item">
+        <label for="sleep-duration">Sleep Duration between NSE API Calls (seconds):</label>
+        <input type="number" id="sleep-duration" name="sleep_duration" min="15">
+    </div>
+
+    <div class="setting-item">
+        <label for="margin-percentage">Margin for Writing Options (%):</label>
+        <input type="number" id="margin-percentage" name="margin_percentage" min="0" step="0.1">
+    </div>
+
+    <div class="setting-item">
+        <label for="transaction-cost">Transaction Cost (%):</label>
+        <input type="number" id="transaction-cost" name="transaction_cost" min="0" step="0.01">
+    </div>
+
+    <div class="setting-item">
+        <label for="stcg-percentage">Short Term Capital Gain Tax (%):</label>
+        <input type="number" id="stcg-percentage" name="stcg_percentage" min="0" step="0.1">
+    </div>
+
+    <div class="setting-item">
+        <label for="min-interest-percentage">Minimum Interest Percentage for Covered Call (%):</label>
+        <input type="number" id="min-interest-percentage" name="min_interest_percentage" min="0" step="0.01">
+    </div>
+
+    <button id="save-settings">Save All Settings</button>
+
+    <div id="message-area" class="message" style="display:none;"></div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const settings = {
+            sleep_duration: document.getElementById('sleep-duration'),
+            margin_percentage: document.getElementById('margin-percentage'),
+            transaction_cost: document.getElementById('transaction-cost'),
+            stcg_percentage: document.getElementById('stcg-percentage'),
+            min_interest_percentage: document.getElementById('min-interest-percentage')
+        };
+        const saveSettingsButton = document.getElementById('save-settings');
+        const messageArea = document.getElementById('message-area');
+
+        // Fetch all settings on page load
+        fetch('/api/settings')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    for (const key in data.settings) {
+                        if (settings[key]) {
+                            settings[key].value = data.settings[key];
+                        }
+                    }
+                } else {
+                    console.error('Error fetching settings:', data.message);
+                    showMessage('error', 'Could not load settings.');
+                }
+            })
+            .catch(error => {
+                console.error('Network error fetching settings:', error);
+                showMessage('error', 'Network error while loading settings.');
+            });
+
+        saveSettingsButton.addEventListener('click', function() {
+            const newSettings = {
+                sleep_duration: parseInt(settings.sleep_duration.value, 10),
+                margin_percentage: parseFloat(settings.margin_percentage.value),
+                transaction_cost: parseFloat(settings.transaction_cost.value),
+                stcg_percentage: parseFloat(settings.stcg_percentage.value),
+                min_interest_percentage: parseFloat(settings.min_interest_percentage.value)
+            };
+
+            // Basic validation
+            if (newSettings.sleep_duration < 15) {
+                showMessage('error', 'Sleep duration cannot be less than 15 seconds.');
+                return;
+            }
+            if (newSettings.min_interest_percentage < 0) {
+                showMessage('error', 'Minimum Interest Percentage cannot be negative.');
+                return;
+            }
+            if (newSettings.min_interest_percentage < 0) {
+                showMessage('error', 'Minimum Interest Percentage cannot be negative.');
+                return;
+            }
+            if (Object.values(newSettings).some(v => isNaN(v))) {
+                showMessage('error', 'All fields must be valid numbers.');
+                return;
+            }
+
+            fetch('/api/settings/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(newSettings)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showMessage('success', data.message);
+                } else {
+                    showMessage('error', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error saving settings:', error);
+                showMessage('error', 'An error occurred while saving settings.');
+            });
+        });
+
+        function showMessage(type, text) {
+            messageArea.textContent = text;
+            messageArea.className = `message ${type}`;
+            messageArea.style.display = 'block';
+            setTimeout(() => {
+                messageArea.style.display = 'none';
+            }, 3000);
+        }
+    });
+</script>
+{% endblock %}

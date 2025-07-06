@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}View F&O Stocks{% endblock %}
+
+{% block content %}
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden; /* Ensures rounded corners apply to table content */
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #00796b; /* Teal header */
+            color: white;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2; /* Light gray for even rows */
+        }
+        tr:hover {
+            background-color: #e0f7fa; /* Lighter blue on hover */
+        }
+        .data {
+            width: 100%;
+            overflow-x: auto;
+        }
+    </style>
+    <h1>F&O Stocks List</h1>
+        {% if fno_stocks %}
+        <div class="data">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Underlying</th>
+                        <th>Symbol</th>
+                        <th>Serial Number</th>
+                        <th>Preferred Stock</th>
+                        <th>Last Updated</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stock in fno_stocks %}
+                        <tr>
+                            <td>{{ stock.underlying }}</td>
+                            <td>{{ stock.symbol }}</td>
+                            <td>{{ stock.serialNumber }}</td>
+                            <td>
+                                <input type="checkbox" class="preferred-stock-checkbox" data-symbol="{{ stock.symbol }}" {% if stock.Preferred_Stock %}checked{% endif %}>
+                            </td>
+                            <td>{{ stock.Last_Updated }}</td>
+                            <td>{{ stock.status }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p>No F&O stocks found.</p>
+    {% endif %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.preferred-stock-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const symbol = this.dataset.symbol;
+                const isPreferred = this.checked;
+
+                fetch('/api/update_preferred_stock', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ symbol: symbol, preferred: isPreferred })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        console.log(data.message);
+                        // Optionally, provide user feedback (e.g., a small toast notification)
+                    } else {
+                        console.error('Error updating preferred stock:', data.message);
+                        // Revert checkbox state if update failed
+                        this.checked = !isPreferred; 
+                        alert('Failed to update preferred stock: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Network error:', error);
+                    this.checked = !isPreferred; // Revert checkbox state on network error
+                    alert('Network error while updating preferred stock.');
+                });
+            });
+        });
+    });
+</script>
+{% endblock %}

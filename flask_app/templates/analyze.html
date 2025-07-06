@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Analyze Data{% endblock %}
+
+{% block content %}
+<style>
+    .secondary-menu {
+        background-color: #e0e0e0;
+        padding: 10px 0;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    .secondary-menu ul {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        justify-content: flex-start; /* Changed to flex-start */
+    }
+    .secondary-menu ul li {
+        margin: 0 15px;
+    }
+    .secondary-menu ul li button {
+        background-color: #00796b;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+    .secondary-menu ul li button:hover {
+        background-color: #004d40;
+    }
+    .main-content {
+        padding: 20px;
+    }
+    #results-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+    #results-table th, #results-table td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+        font-size: 12px;
+    }
+    #results-table th {
+        background-color: #f2f2f2;
+    }
+</style>
+<div class="secondary-menu">
+    <ul>
+        <li><a href="/analyze/covered_call"><button>Covered Call A+B</button></a></li>
+        <li><a href="/analyze/oi_shift"><button>OI Shift</button></a></li>
+    </ul>
+</div>
+<div class="main-content">
+</div>
+{% endblock %}
