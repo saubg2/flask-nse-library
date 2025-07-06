@@ -2,13 +2,17 @@ import nselib.capital_market
 import nselib.derivatives
 import pandas as pd
 from flask import Flask, render_template, request, jsonify
+from dotenv import load_dotenv
+
+load_dotenv()
 import sqlite3
 from datetime import datetime, timedelta
 import time
 import os
 
 app = Flask(__name__)
-DATABASE = 'nselib_data.db'
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+DATABASE = os.environ.get('DATABASE_URL', os.path.join(APP_DIR, 'nselib_data.db'))
 
 def get_db_connection():
     conn = sqlite3.connect(DATABASE)
@@ -735,3 +739,7 @@ def analyze_oi_shift_data():
         print("ERROR: An unexpected error occurred in analyze_oi_shift_data:")
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
