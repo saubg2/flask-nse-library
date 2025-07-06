@@ -61,7 +61,7 @@ idna==3.7
 incremental==24.7.2
 inflect==7.5.0
 ipykernel==6.29.5
-ipython==9.1.0
+#ipython==9.1.0
 ipython_pygments_lexers==1.1.1
 ipywidgets==8.1.6
 isoduration==20.11.0
